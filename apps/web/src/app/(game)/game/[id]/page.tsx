@@ -1,0 +1,525 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { api, setAuthToken } from "@/lib/api";
+
+export default function GamePage() {
+    const router = useRouter();
+    const params = useParams();
+    const id = params.id as string;
+
+    const [challenges, setChallenges] = useState<any[]>([]);
+    const [selectedChallenge, setSelectedChallenge] = useState<any | null>(null);
+    const [team, setTeam] = useState<any>(null);
+    const [messages, setMessages] = useState<{ role: string, content: string }[]>([]);
+    const [input, setInput] = useState("");
+    const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(true);
+
+    const [timeLeft, setTimeLeft] = useState<string>("00:00:00");
+    const [eventEndTime, setEventEndTime] = useState<string | null>(null);
+
+    // Voice features
+    const [voiceMode, setVoiceMode] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('voiceMode') === 'true';
+        }
+        return false;
+    });
+    const [isListening, setIsListening] = useState(false);
+    const recognitionRef = useRef<any>(null);
+    const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+    const isSpeakingRef = useRef(false);
+
+    // Hint tracking
+    const [usedHints, setUsedHints] = useState<Record<string, number[]>>({});  // challengeId => [hintNumbers]
+    const [hintTexts, setHintTexts] = useState<Record<string, Record<number, string>>>({});  // challengeId => {hintNum => text}
+    const [loadingHint, setLoadingHint] = useState<number | null>(null);
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            router.push("/login");
+            return;
+        }
+        setAuthToken(token);
+
+        if (id) {
+            fetchGameStatus();
+        }
+
+        // Initialize speech recognition
+        if (typeof window !== 'undefined') {
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognitionRef.current = new SpeechRecognition();
+                recognitionRef.current.continuous = false;
+                recognitionRef.current.interimResults = false;
+                recognitionRef.current.lang = 'en-US';
+
+                recognitionRef.current.onresult = (event: any) => {
+                    const transcript = event.results[0][0].transcript;
+                    setInput(transcript);
+                    setIsListening(false);
+
+                    // Auto-submit in voice mode
+                    if (voiceMode && transcript.trim()) {
+                        // Small delay to show the transcribed text
+                        setTimeout(() => {
+                            handleChatWithMessage(transcript);
+                        }, 300);
+                    }
+                };
+
+                recognitionRef.current.onerror = (event: any) => {
+                    console.error('Speech recognition error:', event.error);
+                    setIsListening(false);
+                    // Restart listening in voice mode if there was an error
+                    if (voiceMode && event.error !== 'aborted') {
+                        setTimeout(() => startListening(), 1000);
+                    }
+                };
+
+                recognitionRef.current.onend = () => {
+                    setIsListening(false);
+                };
+            }
+        }
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+            if (synthRef.current && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+        };
+    }, [id, voiceMode]);
+
+    useEffect(() => {
+        if (!eventEndTime) return;
+
+        const interval = setInterval(() => {
+            const now = new Date().getTime();
+            const end = new Date(eventEndTime).getTime();
+            const distance = end - now;
+
+            if (distance < 0) {
+                setTimeLeft("00:00:00");
+                clearInterval(interval);
+                return;
+            }
+
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            setTimeLeft(
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+            );
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [eventEndTime]);
+
+    // Auto-start listening when voice mode is enabled
+    useEffect(() => {
+        if (voiceMode && selectedChallenge) {
+            const timer = setTimeout(() => {
+                if (!isSpeakingRef.current && !isListening) {
+                    startListening();
+                }
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [voiceMode, selectedChallenge, isListening]);
+
+    const fetchGameStatus = async () => {
+        try {
+            const res = await api.get(`/game/${id}/status`);
+            setChallenges(res.data.challenges);
+            setTeam(res.data.team);
+            setEventEndTime(res.data.eventEndTime);
+            setLoading(false);
+        } catch (error: any) {
+            console.error("Failed to fetch game status:", error);
+            setLoading(false);
+
+            if (error.response?.status === 401) {
+                alert("Session expired. Please login again.");
+                router.push("/login");
+            } else if (error.response?.status === 404) {
+                alert("You are not in a team for this event. Please join a team.");
+                router.push(`/teams?eventId=${id}`);
+            } else {
+                alert("Failed to load game. Please try again.");
+                router.push(`/teams?eventId=${id}`);
+            }
+        }
+    };
+
+    const handleSelectChallenge = (challenge: any) => {
+        setSelectedChallenge(challenge);
+        setMessages([
+            { role: "system", content: challenge.description || "I am the Gatekeeper. What is the password?" }
+        ]);
+    };
+
+    const startListening = () => {
+        if (!recognitionRef.current || isSpeakingRef.current) return;
+
+        try {
+            recognitionRef.current.start();
+            setIsListening(true);
+        } catch (error: any) {
+            // Ignore if already started
+            if (error.message && !error.message.includes('already started')) {
+                console.error('Error starting recognition:', error);
+            }
+        }
+    };
+
+    const handleChatWithMessage = async (message: string) => {
+        if (!message.trim()) return;
+        if (!selectedChallenge) return;
+
+        const newMessages = [...messages, { role: "user", content: message }];
+        setMessages(newMessages);
+        setInput("");
+
+        try {
+            const res = await api.post(`/ai/chat/${selectedChallenge.id}`, {
+                messages: newMessages
+            });
+
+            const aiResponse = res.data.message;
+            setMessages(prev => [...prev, {
+                role: "system",
+                content: aiResponse
+            }]);
+
+            // Auto-speak response in voice mode
+            if (voiceMode && typeof window !== 'undefined' && window.speechSynthesis) {
+                isSpeakingRef.current = true;
+                const utterance = new SpeechSynthesisUtterance(aiResponse);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+
+                utterance.onend = () => {
+                    isSpeakingRef.current = false;
+                    // Restart listening after speaking
+                    if (voiceMode) {
+                        setTimeout(() => startListening(), 500);
+                    }
+                };
+
+                synthRef.current = utterance;
+                window.speechSynthesis.speak(utterance);
+            }
+        } catch (error) {
+            console.error('AI chat error:', error);
+            const errorMsg = "Sorry, I encountered an error. Please try again.";
+            setMessages(prev => [...prev, {
+                role: "system",
+                content: errorMsg
+            }]);
+
+            if (voiceMode && typeof window !== 'undefined' && window.speechSynthesis) {
+                isSpeakingRef.current = true;
+                const utterance = new SpeechSynthesisUtterance(errorMsg);
+                utterance.onend = () => {
+                    isSpeakingRef.current = false;
+                    if (voiceMode) {
+                        setTimeout(() => startListening(), 500);
+                    }
+                };
+                synthRef.current = utterance;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    };
+
+    const handleChat = async () => {
+        await handleChatWithMessage(input);
+    };
+
+    const toggleVoiceMode = () => {
+        const newValue = !voiceMode;
+        setVoiceMode(newValue);
+        localStorage.setItem('voiceMode', String(newValue));
+
+        if (!newValue) {
+            // Turning off voice mode
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            setIsListening(false);
+            isSpeakingRef.current = false;
+        } else {
+            // Turning on voice mode - start listening
+            if (selectedChallenge) {
+                setTimeout(() => startListening(), 300);
+            }
+        }
+    };
+
+    const getHint = async (hintNumber: number) => {
+        if (!selectedChallenge) return;
+
+        setLoadingHint(hintNumber);
+        try {
+            const res = await api.get(`/game/${id}/challenge/${selectedChallenge.id}/hint/${hintNumber}`);
+
+            // Update used hints
+            setUsedHints(prev => ({
+                ...prev,
+                [selectedChallenge.id]: [...(prev[selectedChallenge.id] || []), hintNumber]
+            }));
+
+            // Store hint text
+            setHintTexts(prev => ({
+                ...prev,
+                [selectedChallenge.id]: {
+                    ...(prev[selectedChallenge.id] || {}),
+                    [hintNumber]: res.data.hint
+                }
+            }));
+
+            // Show hint in alert with penalty info
+            alert(`💡 Hint ${hintNumber}:\n\n${res.data.hint}\n\n⚠️ Penalty: -${res.data.penalty} points (deducted when you solve this challenge)`);
+        } catch (error) {
+            console.error('Failed to get hint:', error);
+            alert('Failed to load hint. Please try again.');
+        } finally {
+            setLoadingHint(null);
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!selectedChallenge) return;
+        try {
+            const res = await api.post(`/game/${id}/challenge/${selectedChallenge.id}/solve`, { password });
+            if (res.data.success) {
+                alert(`Correct! You earned ${res.data.points} points.`);
+                setPassword("");
+                fetchGameStatus(); // Refresh status to update points and solved status
+                setSelectedChallenge(null); // Go back to board
+            } else {
+                alert(res.data.message || "Incorrect password.");
+            }
+        } catch (e: any) {
+            console.error(e);
+            const errorMessage = e.response?.data?.message || "Error submitting.";
+            alert(errorMessage);
+        }
+    };
+
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    }
+
+    return (
+        <div className="flex min-h-screen flex-col">
+            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="container flex h-14 items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="sm" onClick={() => router.push("/events")}>
+                            ← Back to Events
+                        </Button>
+                        <span className="font-bold">{team?.name}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <span className="font-bold">Points: {team?.points}</span>
+                        <div className="font-mono text-xl font-bold text-cmu-red">
+                            {timeLeft}
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div className="flex flex-1 overflow-hidden">
+                {selectedChallenge ? (
+                    // Challenge View (Chat + Solve)
+                    <div className="flex flex-1">
+                        {/* Chat Area */}
+                        <div className="flex-1 flex flex-col p-4 border-r">
+                            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                <h2 className="text-xl font-bold">{selectedChallenge.title}</h2>
+                                <Button variant="ghost" size="sm" onClick={() => setSelectedChallenge(null)}>
+                                    Back to Board
+                                </Button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+                                {messages.map((m, i) => (
+                                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`rounded-lg p-3 max-w-[80%] ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                                            {m.content}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex gap-2">
+                                    {typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) && window.speechSynthesis && (
+                                        <Button
+                                            variant={voiceMode ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={toggleVoiceMode}
+                                            className={voiceMode ? 'bg-gradient-to-r from-blue-500 to-purple-500' : ''}
+                                        >
+                                            {voiceMode ? (
+                                                <>
+                                                    {isListening ? '🎤 Listening...' : isSpeakingRef.current ? '🔊 Speaking...' : '🎤 Voice Mode ON'}
+                                                </>
+                                            ) : (
+                                                '🎤 Voice Mode'
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Input
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    placeholder={voiceMode ? "Listening for voice input..." : "Type a message to the AI..."}
+                                    onKeyDown={(e) => e.key === 'Enter' && !voiceMode && handleChat()}
+                                    disabled={voiceMode}
+                                />
+                                <Button onClick={handleChat} disabled={voiceMode}>Send</Button>
+                            </div>
+                        </div>
+
+                        {/* Sidebar */}
+                        <div className="w-80 p-4 bg-muted/10 flex flex-col gap-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Mission</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-sm text-muted-foreground">
+                                        {selectedChallenge.description}
+                                    </p>
+                                    <div className="mt-4 text-sm">
+                                        <p><strong>Difficulty:</strong> {selectedChallenge.difficulty}</p>
+                                        <p><strong>Points:</strong> {selectedChallenge.points}</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Hints Section */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>💡 Hints Available</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {(() => {
+                                        // Debug: Log challenge data
+                                        console.log('Challenge hint data:', {
+                                            hint1: selectedChallenge.hint1,
+                                            hint2: selectedChallenge.hint2,
+                                            hint3: selectedChallenge.hint3,
+                                            hint1Penalty: selectedChallenge.hint1Penalty,
+                                            hint2Penalty: selectedChallenge.hint2Penalty,
+                                            hint3Penalty: selectedChallenge.hint3Penalty,
+                                        });
+                                        return null;
+                                    })()}
+                                    {[1, 2, 3].map(hintNum => {
+                                        const isUsed = (usedHints[selectedChallenge.id] || []).includes(hintNum);
+                                        const hintText = hintTexts[selectedChallenge.id]?.[hintNum];
+                                        const penalty = selectedChallenge[`hint${hintNum}Penalty`] || 0;
+                                        const hasHint = selectedChallenge[`hint${hintNum}`];
+
+                                        if (!hasHint) return null;
+
+                                        return (
+                                            <div key={hintNum} className="space-y-2">
+                                                <Button
+                                                    variant={isUsed ? "secondary" : "outline"}
+                                                    size="sm"
+                                                    onClick={() => getHint(hintNum)}
+                                                    disabled={isUsed || loadingHint !== null}
+                                                    className="w-full justify-between"
+                                                >
+                                                    <span>Hint {hintNum}</span>
+                                                    <span className="text-xs">
+                                                        {isUsed ? '✓ Used' : `-${penalty} pts`}
+                                                    </span>
+                                                </Button>
+                                                {hintText && (
+                                                    <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-md text-sm border border-yellow-200 dark:border-yellow-800">
+                                                        <p className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">💡 Hint {hintNum}:</p>
+                                                        <p className="text-yellow-800 dark:text-yellow-200">{hintText}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    {![1, 2, 3].some(n => selectedChallenge[`hint${n}`]) && (
+                                        <p className="text-sm text-muted-foreground text-center py-2">
+                                            No hints available for this challenge
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Submit Flag</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <Input
+                                        placeholder="FLAG-{...}"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                    <Button className="w-full" onClick={handleSubmit}>Submit</Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                ) : (
+                    // Challenge Board View
+                    <div className="container py-8">
+                        <h2 className="text-2xl font-bold mb-6">Challenge Board</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {challenges.map((challenge) => (
+                                <Card
+                                    key={challenge.id}
+                                    className={`cursor-pointer hover:shadow-lg transition-shadow ${challenge.status === 'SOLVED' ? 'border-green-500 bg-green-50/50' : ''}`}
+                                    onClick={() => handleSelectChallenge(challenge)}
+                                >
+                                    <CardHeader>
+                                        <div className="flex justify-between items-start">
+                                            <CardTitle>{challenge.title}</CardTitle>
+                                            {challenge.status === 'SOLVED' && (
+                                                <span className="bg-green-500 text-white text-xs px-2 py-1 rounded">SOLVED</span>
+                                            )}
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                                            {challenge.description}
+                                        </p>
+                                        <div className="flex justify-between text-sm font-medium">
+                                            <span>{challenge.difficulty}</span>
+                                            <span>{challenge.points} pts</span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

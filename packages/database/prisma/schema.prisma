@@ -1,0 +1,155 @@
+// packages/database/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String?
+  email     String   @unique
+  password  String?  // Hashed password
+  role      Role     @default(STUDENT)
+  clerkId   String   @unique // External Auth ID
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  teamsCreated Team[]       @relation("TeamLeader")
+  eventsCreated Event[]     @relation("EventCreator")
+  memberships  TeamMember[]
+}
+
+model Event {
+  id                    String   @id @default(uuid())
+  name                  String
+  description           String?
+  registrationStartTime DateTime @map("registration_start_time")
+  registrationEndTime   DateTime @map("registration_end_time")
+  eventStartTime        DateTime @map("event_start_time")
+  eventEndTime          DateTime @map("event_end_time")
+  
+  maxTeams     Int? @map("max_teams")
+  minTeamSize  Int  @default(1) @map("min_team_size")
+  maxTeamSize  Int  @default(4) @map("max_team_size")
+  // totalLevels  Int  @map("total_levels") // Removed in favor of dynamic challenges
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teams      Team[]
+  challenges Challenge[]
+  
+  creatorId String? @map("creator_id")
+  creator   User?   @relation("EventCreator", fields: [creatorId], references: [id])
+}
+
+model Challenge {
+  id          String   @id @default(uuid())
+  eventId     String   @map("event_id")
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  title       String
+  description String
+  points      Int
+  difficulty  String   // e.g., "Easy", "Medium", "Hard"
+  systemPrompt String  @map("system_prompt")
+  flag        String   // The secret flag to capture
+  order       Int      // To order them in the UI if needed
+
+  // Hint system (3 hints with penalties)
+  hint1       String?  // First hint text
+  hint2       String?  // Second hint text
+  hint3       String?  // Third hint text
+  hint1Penalty Int?    @map("hint1_penalty") // Points deducted if hint 1 used
+  hint2Penalty Int?    @map("hint2_penalty") // Points deducted if hint 2 used
+  hint3Penalty Int?    @map("hint3_penalty") // Points deducted if hint 3 used
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  interactions ChallengeInteraction[]
+  hintUsages   HintUsage[]
+}
+
+model Team {
+  id           String   @id @default(uuid())
+  eventId      String   @map("event_id")
+  event        Event    @relation(fields: [eventId], references: [id])
+  name         String
+  joinCode     String   @unique @map("join_code")
+  
+  leaderUserId String   @map("leader_user_id")
+  leader       User     @relation("TeamLeader", fields: [leaderUserId], references: [id])
+
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  members      TeamMember[]
+  progress     TeamProgress?
+  interactions ChallengeInteraction[]
+  hintUsages   HintUsage[]
+
+  @@unique([eventId, name])
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  teamId    String   @map("team_id")
+  team      Team     @relation(fields: [teamId], references: [id])
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  @@unique([userId, teamId])
+  @@index([userId])
+}
+
+model TeamProgress {
+  teamId         String   @id @map("team_id")
+  team           Team     @relation(fields: [teamId], references: [id])
+  
+  totalPoints    Int      @default(0) @map("total_points")
+  lastUpdateTime DateTime @default(now()) @map("last_update_time")
+}
+
+model ChallengeInteraction {
+  id          String   @id @default(uuid())
+  teamId      String   @map("team_id")
+  team        Team     @relation(fields: [teamId], references: [id])
+  challengeId String   @map("challenge_id")
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  
+  solved      Boolean  @default(false)
+  solvedAt    DateTime? @map("solved_at")
+  input       String?  // The guess or interaction
+  response    String?  // AI response
+
+  timestamp   DateTime @default(now())
+}
+
+model HintUsage {
+  id          String   @id @default(uuid())
+  teamId      String   @map("team_id")
+  team        Team     @relation(fields: [teamId], references: [id])
+  challengeId String   @map("challenge_id")
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  
+  hintNumber  Int      @map("hint_number") // 1, 2, or 3
+  usedAt      DateTime @default(now()) @map("used_at")
+
+  @@unique([teamId, challengeId, hintNumber])
+  @@map("hint_usage")
+}
