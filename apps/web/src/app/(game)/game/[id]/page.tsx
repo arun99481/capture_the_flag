@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, setAuthToken } from "@/lib/api";
+import SimulationChallenge from "@/components/SimulationChallenge";
 
 export default function GamePage() {
     const router = useRouter();
@@ -346,149 +347,156 @@ export default function GamePage() {
 
             <div className="flex flex-1 overflow-hidden">
                 {selectedChallenge ? (
-                    // Challenge View (Chat + Solve)
-                    <div className="flex flex-1">
-                        {/* Chat Area */}
-                        <div className="flex-1 flex flex-col p-4 border-r">
-                            <div className="flex justify-between items-center mb-4 border-b pb-2">
-                                <h2 className="text-xl font-bold">{selectedChallenge.title}</h2>
+                    selectedChallenge.type === "SIMULATION" ? (
+                        // SIMULATION Challenge View
+                        <div className="flex-1 p-4 overflow-y-auto">
+                            <div className="mb-4 flex justify-between items-center">
                                 <Button variant="ghost" size="sm" onClick={() => setSelectedChallenge(null)}>
-                                    Back to Board
+                                    ← Back to Board
                                 </Button>
                             </div>
-                            <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                                {messages.map((m, i) => (
-                                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`rounded-lg p-3 max-w-[80%] ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                                            {m.content}
+                            <SimulationChallenge
+                                challenge={selectedChallenge}
+                                eventId={id}
+                                onFlagSubmit={handleSubmit}
+                                usedHints={usedHints[selectedChallenge.id] || []}
+                                onGetHint={getHint}
+                                hintTexts={hintTexts[selectedChallenge.id] || {}}
+                            />
+                        </div>
+                    ) : (
+                        // CHAT Challenge View (Original)
+                        <div className="flex flex-1">
+                            {/* Chat Area */}
+                            <div className="flex-1 flex flex-col p-4 border-r">
+                                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                    <h2 className="text-xl font-bold">{selectedChallenge.title}</h2>
+                                    <Button variant="ghost" size="sm" onClick={() => setSelectedChallenge(null)}>
+                                        Back to Board
+                                    </Button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+                                    {messages.map((m, i) => (
+                                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`rounded-lg p-3 max-w-[80%] ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                                                {m.content}
+                                            </div>
                                         </div>
+                                    ))}
+                                </div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex gap-2">
+                                        {typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) && window.speechSynthesis && (
+                                            <Button
+                                                variant={voiceMode ? "default" : "outline"}
+                                                size="sm"
+                                                onClick={toggleVoiceMode}
+                                                className={voiceMode ? 'bg-gradient-to-r from-blue-500 to-purple-500' : ''}
+                                            >
+                                                {voiceMode ? (
+                                                    <>
+                                                        {isListening ? '🎤 Listening...' : isSpeakingRef.current ? '🔊 Speaking...' : '🎤 Voice Mode ON'}
+                                                    </>
+                                                ) : (
+                                                    '🎤 Voice Mode'
+                                                )}
+                                            </Button>
+                                        )}
                                     </div>
-                                ))}
-                            </div>
-                            <div className="flex items-center justify-between mb-2">
+                                </div>
                                 <div className="flex gap-2">
-                                    {typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) && window.speechSynthesis && (
-                                        <Button
-                                            variant={voiceMode ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={toggleVoiceMode}
-                                            className={voiceMode ? 'bg-gradient-to-r from-blue-500 to-purple-500' : ''}
-                                        >
-                                            {voiceMode ? (
-                                                <>
-                                                    {isListening ? '🎤 Listening...' : isSpeakingRef.current ? '🔊 Speaking...' : '🎤 Voice Mode ON'}
-                                                </>
-                                            ) : (
-                                                '🎤 Voice Mode'
-                                            )}
-                                        </Button>
-                                    )}
+                                    <Input
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        placeholder={voiceMode ? "Listening for voice input..." : "Type a message to the AI..."}
+                                        onKeyDown={(e) => e.key === 'Enter' && !voiceMode && handleChat()}
+                                        disabled={voiceMode}
+                                    />
+                                    <Button onClick={handleChat} disabled={voiceMode}>Send</Button>
                                 </div>
                             </div>
-                            <div className="flex gap-2">
-                                <Input
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    placeholder={voiceMode ? "Listening for voice input..." : "Type a message to the AI..."}
-                                    onKeyDown={(e) => e.key === 'Enter' && !voiceMode && handleChat()}
-                                    disabled={voiceMode}
-                                />
-                                <Button onClick={handleChat} disabled={voiceMode}>Send</Button>
+
+                            {/* Sidebar */}
+                            <div className="w-80 p-4 bg-muted/10 flex flex-col gap-6 overflow-y-auto">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Mission</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-sm text-muted-foreground">
+                                            {selectedChallenge.description}
+                                        </p>
+                                        <div className="mt-4 text-sm">
+                                            <p><strong>Difficulty:</strong> {selectedChallenge.difficulty}</p>
+                                            <p><strong>Points:</strong> {selectedChallenge.points}</p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Hints Section */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>💡 Hints Available</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        {[1, 2, 3].map(hintNum => {
+                                            const isUsed = (usedHints[selectedChallenge.id] || []).includes(hintNum);
+                                            const hintText = hintTexts[selectedChallenge.id]?.[hintNum];
+                                            const penalty = selectedChallenge[`hint${hintNum}Penalty`] || 0;
+                                            const hasHint = selectedChallenge[`hint${hintNum}`];
+
+                                            if (!hasHint) return null;
+
+                                            return (
+                                                <div key={hintNum} className="space-y-2">
+                                                    <Button
+                                                        variant={isUsed ? "secondary" : "outline"}
+                                                        size="sm"
+                                                        onClick={() => getHint(hintNum)}
+                                                        disabled={isUsed || loadingHint !== null}
+                                                        className="w-full justify-between"
+                                                    >
+                                                        <span>Hint {hintNum}</span>
+                                                        <span className="text-xs">
+                                                            {isUsed ? '✓ Used' : `-${penalty} pts`}
+                                                        </span>
+                                                    </Button>
+                                                    {hintText && (
+                                                        <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-md text-sm border border-yellow-200 dark:border-yellow-800">
+                                                            <p className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">💡 Hint {hintNum}:</p>
+                                                            <p className="text-yellow-800 dark:text-yellow-200">{hintText}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                        {![1, 2, 3].some(n => selectedChallenge[`hint${n}`]) && (
+                                            <p className="text-sm text-muted-foreground text-center py-2">
+                                                No hints available for this challenge
+                                            </p>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Submit Flag</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <Input
+                                            placeholder="FLAG-{...}"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                        />
+                                        <Button className="w-full" onClick={handleSubmit}>Submit</Button>
+                                    </CardContent>
+                                </Card>
                             </div>
                         </div>
-
-                        {/* Sidebar */}
-                        <div className="w-80 p-4 bg-muted/10 flex flex-col gap-6">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Mission</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-sm text-muted-foreground">
-                                        {selectedChallenge.description}
-                                    </p>
-                                    <div className="mt-4 text-sm">
-                                        <p><strong>Difficulty:</strong> {selectedChallenge.difficulty}</p>
-                                        <p><strong>Points:</strong> {selectedChallenge.points}</p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Hints Section */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>💡 Hints Available</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    {(() => {
-                                        // Debug: Log challenge data
-                                        console.log('Challenge hint data:', {
-                                            hint1: selectedChallenge.hint1,
-                                            hint2: selectedChallenge.hint2,
-                                            hint3: selectedChallenge.hint3,
-                                            hint1Penalty: selectedChallenge.hint1Penalty,
-                                            hint2Penalty: selectedChallenge.hint2Penalty,
-                                            hint3Penalty: selectedChallenge.hint3Penalty,
-                                        });
-                                        return null;
-                                    })()}
-                                    {[1, 2, 3].map(hintNum => {
-                                        const isUsed = (usedHints[selectedChallenge.id] || []).includes(hintNum);
-                                        const hintText = hintTexts[selectedChallenge.id]?.[hintNum];
-                                        const penalty = selectedChallenge[`hint${hintNum}Penalty`] || 0;
-                                        const hasHint = selectedChallenge[`hint${hintNum}`];
-
-                                        if (!hasHint) return null;
-
-                                        return (
-                                            <div key={hintNum} className="space-y-2">
-                                                <Button
-                                                    variant={isUsed ? "secondary" : "outline"}
-                                                    size="sm"
-                                                    onClick={() => getHint(hintNum)}
-                                                    disabled={isUsed || loadingHint !== null}
-                                                    className="w-full justify-between"
-                                                >
-                                                    <span>Hint {hintNum}</span>
-                                                    <span className="text-xs">
-                                                        {isUsed ? '✓ Used' : `-${penalty} pts`}
-                                                    </span>
-                                                </Button>
-                                                {hintText && (
-                                                    <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-md text-sm border border-yellow-200 dark:border-yellow-800">
-                                                        <p className="font-medium text-yellow-900 dark:text-yellow-100 mb-1">💡 Hint {hintNum}:</p>
-                                                        <p className="text-yellow-800 dark:text-yellow-200">{hintText}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                    {![1, 2, 3].some(n => selectedChallenge[`hint${n}`]) && (
-                                        <p className="text-sm text-muted-foreground text-center py-2">
-                                            No hints available for this challenge
-                                        </p>
-                                    )}
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Submit Flag</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <Input
-                                        placeholder="FLAG-{...}"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                    />
-                                    <Button className="w-full" onClick={handleSubmit}>Submit</Button>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
+                    )
                 ) : (
                     // Challenge Board View
-                    <div className="container py-8">
+                    <div className="container py-8 overflow-y-auto">
                         <h2 className="text-2xl font-bold mb-6">Challenge Board</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {challenges.map((challenge) => (
@@ -519,7 +527,7 @@ export default function GamePage() {
                         </div>
                     </div>
                 )}
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

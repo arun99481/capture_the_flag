@@ -14,6 +14,11 @@ enum Role {
   ADMIN
 }
 
+enum ChallengeType {
+  CHAT
+  SIMULATION
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String?
@@ -63,7 +68,7 @@ model Challenge {
   description String
   points      Int
   difficulty  String   // e.g., "Easy", "Medium", "Hard"
-  systemPrompt String  @map("system_prompt")
+  systemPrompt String?  @map("system_prompt") // Required for CHAT, not for SIMULATION
   flag        String   // The secret flag to capture
   order       Int      // To order them in the UI if needed
 
@@ -74,6 +79,19 @@ model Challenge {
   hint1Penalty Int?    @map("hint1_penalty") // Points deducted if hint 1 used
   hint2Penalty Int?    @map("hint2_penalty") // Points deducted if hint 2 used
   hint3Penalty Int?    @map("hint3_penalty") // Points deducted if hint 3 used
+
+  // Challenge type and simulation-specific fields
+  type              ChallengeType @default(CHAT)
+  websiteTheme      String?       @map("website_theme")     // "bank", "ecommerce", "support"
+  module1Name       String?       @map("module1_name")
+  module1Content    String?       @map("module1_content")   @db.Text
+  module2Name       String?       @map("module2_name")
+  module2Content    String?       @map("module2_content")   @db.Text
+  module3Name       String?       @map("module3_name")
+  module3Content    String?       @map("module3_content")   @db.Text
+  lockedModuleIndex Int?          @map("locked_module_index") // 0=none, 1-3=locked module
+  lockedModuleMsg   String?       @map("locked_module_msg")
+  chatbotPrompt     String?       @map("chatbot_prompt")    @db.Text
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

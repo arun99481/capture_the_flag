@@ -49,19 +49,33 @@ export class GameService {
             eventEndTime: team.event.eventEndTime,
             challenges: team.event.challenges.map(c => ({
                 id: c.id,
+                type: c.type,
                 title: c.title,
                 description: c.description,
                 points: c.points,
                 difficulty: c.difficulty,
                 order: c.order,
                 status: solvedChallengeIds.includes(c.id) ? 'SOLVED' : 'OPEN',
-                // Include hint fields
+                // Chat-specific
+                systemPrompt: c.systemPrompt,
+                // Hint fields (both types)
                 hint1: c.hint1,
                 hint2: c.hint2,
                 hint3: c.hint3,
                 hint1Penalty: c.hint1Penalty,
                 hint2Penalty: c.hint2Penalty,
                 hint3Penalty: c.hint3Penalty,
+                // Simulation-specific
+                websiteTheme: c.websiteTheme,
+                module1Name: c.module1Name,
+                module1Content: c.module1Content,
+                module2Name: c.module2Name,
+                module2Content: c.module2Content,
+                module3Name: c.module3Name,
+                module3Content: c.module3Content,
+                lockedModuleIndex: c.lockedModuleIndex,
+                lockedModuleMsg: c.lockedModuleMsg,
+                chatbotPrompt: c.chatbotPrompt,
             }))
         };
     }
