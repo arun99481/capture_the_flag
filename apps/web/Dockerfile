@@ -32,6 +32,7 @@ RUN npm install
 
 COPY --from=builder /app/out/full/ .
 COPY turbo.json turbo.json
+COPY tsconfig.json tsconfig.json
 
 # Build the project
 # Note: We might need ARG for NEXT_PUBLIC_ env vars here if baking them in
