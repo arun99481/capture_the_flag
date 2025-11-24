@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-east-2
   ECR_REPOSITORY_API: tartan-ctf-api
   ECR_REPOSITORY_WEB: tartan-ctf-web
   ECS_SERVICE_API: tartan-ctf-api-service
