@@ -1,6 +1,7 @@
 {
     "extends": "../../packages/shared/tsconfig.json",
     "compilerOptions": {
+        "rootDir": ".",
         "baseUrl": ".",
         "target": "es5",
         "lib": [
