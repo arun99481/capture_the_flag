@@ -1,8 +1,20 @@
-FROM node:18-alpine AS base
+# Use Ubuntu as base
+FROM ubuntu:22.04 AS base
+
+# Install Node.js and npm
+RUN apt-get update && \
+    apt-get install -y curl gnupg build-essential && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
+
+# Verify
+RUN node -v
+RUN npm -v
 
 # Prune the workspace for the web app
 FROM base AS builder
-RUN apk add --no-cache libc6-compat
+# RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN npm install -g turbo
 COPY . .
@@ -10,7 +22,7 @@ RUN turbo prune --scope=web --docker
 
 # Add lockfile and package.json's of isolated subworkspace
 FROM base AS installer
-RUN apk add --no-cache libc6-compat
+# RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY .gitignore .gitignore
@@ -28,8 +40,8 @@ RUN npx turbo run build --filter=web...
 FROM base AS runner
 WORKDIR /app
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd -g 1001 -r nodejs
+RUN useradd -u 1001 -r -g nodejs -s /bin/sh nextjs
 USER nextjs
 
 COPY --from=installer /app/apps/web/next.config.js .

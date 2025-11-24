@@ -5,12 +5,15 @@ const prisma = new client_1.PrismaClient();
 async function main() {
     console.log('Checking database state...');
     const eventId = '1';
+    // Check if event exists
     const event = await prisma.event.findUnique({ where: { id: eventId } });
     console.log('Event:', event ? 'Found' : 'Not Found');
+    // List all users
     const users = await prisma.user.findMany();
     console.log(`Found ${users.length} users`);
     for (const user of users) {
         console.log(`User: ${user.email} (${user.id})`);
+        // Check if user is in a team for this event
         const member = await prisma.teamMember.findFirst({
             where: {
                 userId: user.id,
@@ -25,6 +28,7 @@ async function main() {
             console.log(`  - Not in any team for event ${eventId}`);
         }
     }
+    // List all teams for this event
     const teams = await prisma.team.findMany({ where: { eventId } });
     console.log(`Found ${teams.length} teams for event ${eventId}:`);
     teams.forEach(t => console.log(`  - ${t.name} (${t.joinCode})`));
@@ -37,4 +41,3 @@ main()
     .finally(async () => {
     await prisma.$disconnect();
 });
-//# sourceMappingURL=debug-team.js.map

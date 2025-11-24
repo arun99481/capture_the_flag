@@ -6,8 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const axios_1 = __importDefault(require("axios"));
 async function main() {
     const url = 'http://localhost:3001/api/auth/login';
-    const email = 'student@cmu.edu';
-    const password = 'password';
+    const email = 'student@cmu.edu'; // Using the user from the debug output earlier
+    const password = 'password'; // I don't know the password, but I can try a guess or create a new user
     console.log(`Attempting login to ${url} with email ${email}...`);
     try {
         const response = await axios_1.default.post(url, {
@@ -30,4 +30,3 @@ async function main() {
     }
 }
 main();
-//# sourceMappingURL=test-login.js.map

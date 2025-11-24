@@ -4,6 +4,7 @@ const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 async function main() {
     console.log('Seeding database...');
+    // Create Event 1 (TartanHacks CTF)
     const event1 = await prisma.event.upsert({
         where: { id: '1' },
         update: {
@@ -42,4 +43,3 @@ main()
     .finally(async () => {
     await prisma.$disconnect();
 });
-//# sourceMappingURL=seed.js.map

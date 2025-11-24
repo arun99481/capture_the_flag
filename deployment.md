@@ -1,70 +1,99 @@
-# AWS Deployment Guide for TartanCTF
+# Deployment Guide
 
 ## Prerequisites
-- AWS CLI installed and configured.
-- Docker installed.
-- GitHub Repository set up.
+1.  **AWS EC2 Instance**: A running instance (Ubuntu recommended) with Docker and Docker Compose installed.
+2.  **Domain (Optional)**: A domain name pointing to your EC2 Public IP.
 
-## 1. Infrastructure Setup (AWS Console or Terraform)
+## AWS Configuration
 
-### Networking
-- Create a VPC with 2 Public Subnets and 2 Private Subnets.
-- Create an Internet Gateway and NAT Gateway.
+### 1. Security Groups
+Ensure your EC2 instance's Security Group allows the following inbound traffic:
+-   **SSH (Port 22)**: Allow from your IP address (for management).
+-   **HTTP (Port 80)**: Allow from Anywhere (0.0.0.0/0) - Required for ACME challenges and initial redirect.
+-   **HTTPS (Port 443)**: Allow from Anywhere (0.0.0.0/0) - Required for secure traffic.
 
-### Database (RDS)
-- Launch an **Amazon RDS for PostgreSQL** instance.
-- **Subnet Group**: Use Private Subnets.
-- **Security Group**: Allow inbound on port 5432 from the ECS Security Group.
-- **Credentials**: Store username/password in AWS Secrets Manager.
+### 2. DNS Configuration
+Go to your domain registrar (e.g., GoDaddy, Namecheap, Route53) and manage DNS records for `tartanctf.com`:
+-   **A Record**: Host `@` points to your EC2 Public IP.
+-   **CNAME Record**: Host `www` points to `tartanctf.com` (or create another A record pointing to the IP).
 
-### Container Registry (ECR)
-- Create two repositories:
-    - `tartan-ctf-api`
-    - `tartan-ctf-web`
+Wait for DNS propagation (can take minutes to hours) before running Certbot.
 
-### Compute (ECS Fargate)
-- Create a Cluster: `tartan-ctf-cluster`.
-- **Task Definitions**:
-    - Create `tartan-ctf-api-task`:
-        - Image: `<AWS_ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/tartan-ctf-api:latest`
-        - CPU: 512, Memory: 1024
-        - Env Vars:
-            - `DATABASE_URL`: `postgresql://...` (Use Secrets Manager valueFrom)
-            - `CLERK_SECRET_KEY`: `...`
-            - `OPENAI_API_KEY`: `...`
-        - Port Mappings: 3001
-    - Create `tartan-ctf-web-task`:
-        - Image: `<AWS_ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/tartan-ctf-web:latest`
-        - CPU: 512, Memory: 1024
-        - Env Vars:
-            - `NEXT_PUBLIC_API_URL`: Load Balancer DNS for API
-            - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`: `...`
-        - Port Mappings: 3000
+## Setup Steps
 
-### Load Balancing (ALB)
-- Create an Application Load Balancer (Internet Facing).
-- **Target Groups**:
-    - `tg-api`: Port 3001 (HTTP), Health check `/api/health` (or `/`)
-    - `tg-web`: Port 3000 (HTTP), Health check `/`
-- **Listeners**:
-    - Port 80/443:
-        - Rule 1: If path pattern `/api/*` -> Forward to `tg-api`
-        - Default: Forward to `tg-web`
+### 1. Server Setup
+SSH into your EC2 instance and install Docker:
+```bash
+# Install Docker & Docker Compose
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose
+sudo usermod -aG docker $USER
+# Log out and log back in for group changes to take effect
+```
 
-## 2. GitHub Actions Setup
-1. Go to GitHub Repo -> Settings -> Secrets.
-2. Add:
-    - `AWS_ACCESS_KEY_ID`
-    - `AWS_SECRET_ACCESS_KEY`
-3. Ensure `.aws/task-definition-api.json` and `.aws/task-definition-web.json` exist in the repo (export them from AWS Console after creating the initial task defs).
+Clone the repository:
+```bash
+git clone <your-repo-url> capture_the_flag
+cd capture_the_flag
+```
 
-## 3. Secrets Management
-Use **AWS Secrets Manager** to store sensitive config.
-- Secret Name: `prod/tartan-ctf`
-- Keys: `DATABASE_URL`, `CLERK_SECRET_KEY`, `OPENAI_API_KEY`.
-- In ECS Task Definition, reference these using `valueFrom`.
+### 2. GitHub Secrets
+Go to your repository on GitHub -> Settings -> Secrets and Variables -> Actions -> New Repository Secret.
+Add the following secrets:
 
-## 4. Static Assets (Optional Optimization)
-For better performance, upload `.next/static` to S3 and serve via CloudFront.
-- Update `next.config.js` with `assetPrefix`.
-- Add a step in CI/CD to sync `apps/web/.next/static` to S3.
+| Secret Name | Description |
+|---|---|
+| `HOST` | Public IP address or DNS of your EC2 instance |
+| `USERNAME` | SSH username (usually `ubuntu` for AWS Ubuntu images) |
+| `SSH_KEY` | The private key (`.pem` content) used to access the instance |
+
+### 3. Environment Variables
+On the server, create a `.env` file in the `capture_the_flag` directory with your production secrets:
+
+```bash
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=very_secure_password_here
+POSTGRES_DB=tartan_ctf
+JWT_SECRET=another_secure_secret_here
+# Add other keys as needed
+```
+
+### 4. First Deployment
+You can trigger the deployment by pushing to the `main` branch, or manually running the "Deploy to EC2" workflow in the GitHub Actions tab.
+
+## Nginx & SSL
+To enable HTTPS for `tartanctf.com`:
+
+1.  **Install Certbot** on your EC2 instance (host machine):
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -y certbot
+    ```
+
+2.  **Generate Certificates**:
+    Stop any running containers on port 80 first (if Nginx is already running):
+    ```bash
+    docker-compose -f docker-compose.prod.yml down
+    ```
+    Run Certbot in standalone mode:
+    ```bash
+    sudo certbot certonly --standalone -d tartanctf.com -d www.tartanctf.com
+    ```
+    Follow the prompts. This will save certificates to `/etc/letsencrypt/live/tartanctf.com/`.
+
+3.  **Deploy**:
+    Start the containers again. The `nginx` service is configured to mount the certificates from the host.
+    ```bash
+    docker-compose -f docker-compose.prod.yml up -d
+    ```
+
+4.  **Renewal**:
+    To renew certificates in the future:
+    ```bash
+    # Stop nginx temporarily
+    docker stop tartan_ctf_nginx
+    # Renew
+    sudo certbot renew
+    # Start nginx
+    docker start tartan_ctf_nginx
+    ```

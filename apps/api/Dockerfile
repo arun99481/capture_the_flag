@@ -1,9 +1,22 @@
-FROM node:18-alpine AS base
+# Use Ubuntu as base
+FROM ubuntu:22.04 AS base
+
+# Install Node.js and npm
+RUN apt-get update && \
+    apt-get install -y curl gnupg build-essential && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
+
+# Verify
+RUN node -v
+RUN npm -v
 
 # Prune the workspace for the api app
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+# RUN apk add --no-cache libc6-compat
 # Set working directory
 WORKDIR /app
 # Install turbo
@@ -14,7 +27,7 @@ RUN turbo prune --scope=api --docker
 
 # Add lockfile and package.json's of isolated subworkspace
 FROM base AS installer
-RUN apk add --no-cache libc6-compat
+# RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # First install dependencies (as they change less often)
@@ -36,8 +49,8 @@ FROM base AS runner
 WORKDIR /app
 
 # Don't run production as root
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
+RUN groupadd -g 1001 -r nodejs
+RUN useradd -u 1001 -r -g nodejs -s /bin/sh nestjs
 USER nestjs
 
 COPY --from=installer /app .
