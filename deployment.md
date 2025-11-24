@@ -19,6 +19,14 @@ Go to your domain registrar (e.g., GoDaddy, Namecheap, Route53) and manage DNS r
 
 Wait for DNS propagation (can take minutes to hours) before running Certbot.
 
+### 3. ECR Repositories
+You need to create the ECR repositories to store your Docker images. Run these commands locally (if you have AWS CLI configured) or use the AWS CloudShell/Console:
+
+```bash
+aws ecr create-repository --repository-name tartan-ctf-api --region us-east-2
+aws ecr create-repository --repository-name tartan-ctf-web --region us-east-2
+```
+
 ## Setup Steps
 
 ### 1. Server Setup
