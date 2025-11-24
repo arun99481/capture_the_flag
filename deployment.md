@@ -27,6 +27,29 @@ aws ecr create-repository --repository-name tartan-ctf-api --region us-east-2
 aws ecr create-repository --repository-name tartan-ctf-web --region us-east-2
 ```
 
+### 4. ECS Cluster
+You need to create the ECS cluster where your services will run.
+```bash
+aws ecs create-cluster --cluster-name tartan-ctf-cluster --region us-east-2
+```
+
+### 5. ECS Services
+You need to create the services in your cluster. It is easiest to do this via the AWS Console to select your VPC subnets and security groups.
+
+**Service 1: API**
+-   **Name**: `tartan-ctf-api-service`
+-   **Task Definition**: `tartan-ctf-api-task` (latest revision)
+-   **Launch Type**: FARGATE
+-   **Desired tasks**: 1
+-   **Networking**: Select your **Default VPC** and its subnets. Select the security group you configured earlier. Ensure **Auto-assign public IP** is ENABLED.
+
+**Service 2: Web**
+-   **Name**: `tartan-ctf-web-service`
+-   **Task Definition**: `tartan-ctf-web-task` (latest revision)
+-   **Launch Type**: FARGATE
+-   **Desired tasks**: 1
+-   **Networking**: Same as API.
+
 ## Setup Steps
 
 ### 1. Server Setup
