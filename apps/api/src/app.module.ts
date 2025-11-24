@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
 import { TeamsModule } from './modules/teams/teams.module';
@@ -25,5 +26,6 @@ import { ConfigModule } from '@nestjs/config';
         LeaderboardModule,
         AiModule,
     ],
+    controllers: [AppController],
 })
 export class AppModule { }

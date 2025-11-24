@@ -64,6 +64,10 @@ jobs:
         task-definition: ${{ env.ECS_TASK_DEFINITION_API }}
         container-name: ${{ env.CONTAINER_NAME_API }}
         image: ${{ steps.build-image-api.outputs.image }}
+        environment-variables: |
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          PORT=3000
 
     - name: Fill in the new image ID in the Amazon ECS task definition (Web)
       id: task-def-web
