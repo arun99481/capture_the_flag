@@ -39,6 +39,7 @@ RUN npm install
 # Build the project and its dependencies
 COPY --from=builder /app/out/full/ .
 COPY turbo.json turbo.json
+COPY tsconfig.json tsconfig.json
 
 # Generate Prisma Client
 RUN npx prisma generate --schema=packages/database/prisma/schema.prisma
