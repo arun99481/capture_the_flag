@@ -36,11 +36,12 @@ export default function AdminDashboard() {
     });
 
     const addChallenge = () => {
-        setNewEvent({
-            ...newEvent,
+        setNewEvent(prev => ({
+            ...prev,
             challenges: [
-                ...newEvent.challenges,
+                ...prev.challenges,
                 {
+                    type: "CHAT",  // Default to CHAT type
                     title: "",
                     description: "",
                     points: 100,
@@ -53,9 +54,20 @@ export default function AdminDashboard() {
                     hint1Penalty: 0,
                     hint2Penalty: 0,
                     hint3Penalty: 0,
+                    // Simulation fields
+                    websiteTheme: "bank",
+                    module1Name: "Summer Portfolio",
+                    module1Content: "",
+                    module2Name: "Winter Portfolio",
+                    module2Content: "",
+                    module3Name: "Spring Portfolio",
+                    module3Content: "",
+                    lockedModuleIndex: 0,
+                    lockedModuleMsg: "",
+                    chatbotPrompt: "",
                 }
             ]
-        });
+        }));
     };
 
     const removeChallenge = (index: number) => {
@@ -297,6 +309,20 @@ export default function AdminDashboard() {
                                                     required
                                                 />
                                             </div>
+
+                                            {/* Challenge Type Selector */}
+                                            <div className="col-span-2 space-y-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md">
+                                                <label className="text-sm font-medium">Challenge Type</label>
+                                                <select
+                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                                    value={challenge.type}
+                                                    onChange={e => updateChallenge(index, 'type', e.target.value)}
+                                                >
+                                                    <option value="CHAT">Chat-Based Guard Challenge</option>
+                                                    <option value="SIMULATION">Website Simulation Challenge</option>
+                                                </select>
+                                            </div>
+
                                             <div className="space-y-2">
                                                 <label className="text-sm font-medium">Points</label>
                                                 <Input
@@ -333,16 +359,19 @@ export default function AdminDashboard() {
                                                     required
                                                 />
                                             </div>
-                                            <div className="col-span-2 space-y-2">
-                                                <label className="text-sm font-medium">System Prompt</label>
-                                                <textarea
-                                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    value={challenge.systemPrompt}
-                                                    onChange={e => updateChallenge(index, 'systemPrompt', e.target.value)}
-                                                    placeholder="You are a guard..."
-                                                    required
-                                                />
-                                            </div>
+
+                                            {/* CHAT Type - System Prompt */}
+                                            {challenge.type === "CHAT" && (
+                                                <div className="col-span-2 space-y-2">
+                                                    <label className="text-sm font-medium">System Prompt (Chat Guard Personality)</label>
+                                                    <textarea
+                                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        value={challenge.systemPrompt}
+                                                        onChange={e => updateChallenge(index, 'systemPrompt', e.target.value)}
+                                                        placeholder="You are a guard..."
+                                                    />
+                                                </div>
+                                            )}
 
                                             {/* Hints Section */}
                                             <div className="col-span-2 space-y-4 p-4 border rounded-md bg-muted/20">
@@ -417,6 +446,116 @@ export default function AdminDashboard() {
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* SIMULATION Type - Website Configuration */}
+                                            {challenge.type === "SIMULATION" && (
+                                                <div className="col-span-2 space-y-4 p-4 border rounded-md bg-purple-50/50 dark:bg-purple-950/20">
+                                                    <h4 className="font-medium text-purple-900 dark:text-purple-100">🌐 Website Simulation Configuration</h4>
+
+                                                    {/* Theme Selector */}
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Website Theme</label>
+                                                        <select
+                                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                            value={challenge.websiteTheme}
+                                                            onChange={e => updateChallenge(index, 'websiteTheme', e.target.value)}
+                                                        >
+                                                            <option value="bank">Bank Dashboard</option>
+                                                            <option value="ecommerce">E-Commerce Portal</option>
+                                                            <option value="support">Support Center</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Module 1 */}
+                                                    <div className="grid gap-2">
+                                                        <label className="text-sm font-medium">Module 1 Name</label>
+                                                        <Input
+                                                            value={challenge.module1Name}
+                                                            onChange={e => updateChallenge(index, 'module1Name', e.target.value)}
+                                                            placeholder="e.g., Summer Portfolio"
+                                                        />
+                                                        <label className="text-sm font-medium">Module 1 Content</label>
+                                                        <textarea
+                                                            className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                            value={challenge.module1Content}
+                                                            onChange={e => updateChallenge(index, 'module1Content', e.target.value)}
+                                                            placeholder="Information shown in this module..."
+                                                        />
+                                                    </div>
+
+                                                    {/* Module 2 */}
+                                                    <div className="grid gap-2">
+                                                        <label className="text-sm font-medium">Module 2 Name</label>
+                                                        <Input
+                                                            value={challenge.module2Name}
+                                                            onChange={e => updateChallenge(index, 'module2Name', e.target.value)}
+                                                            placeholder="e.g., Winter Portfolio"
+                                                        />
+                                                        <label className="text-sm font-medium">Module 2 Content</label>
+                                                        <textarea
+                                                            className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                            value={challenge.module2Content}
+                                                            onChange={e => updateChallenge(index, 'module2Content', e.target.value)}
+                                                            placeholder="Information shown in this module..."
+                                                        />
+                                                    </div>
+
+                                                    {/* Module 3 */}
+                                                    <div className="grid gap-2">
+                                                        <label className="text-sm font-medium">Module 3 Name</label>
+                                                        <Input
+                                                            value={challenge.module3Name}
+                                                            onChange={e => updateChallenge(index, 'module3Name', e.target.value)}
+                                                            placeholder="e.g., Spring Portfolio"
+                                                        />
+                                                        <label className="text-sm font-medium">Module 3 Content</label>
+                                                        <textarea
+                                                            className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                            value={challenge.module3Content}
+                                                            onChange={e => updateChallenge(index, 'module3Content', e.target.value)}
+                                                            placeholder="Information shown in this module..."
+                                                        />
+                                                    </div>
+
+                                                    {/* Locked Module */}
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Locked Module</label>
+                                                        <select
+                                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                            value={challenge.lockedModuleIndex}
+                                                            onChange={e => updateChallenge(index, 'lockedModuleIndex', parseInt(e.target.value))}
+                                                        >
+                                                            <option value={0}>None (all unlocked)</option>
+                                                            <option value={1}>Module 1</option>
+                                                            <option value={2}>Module 2</option>
+                                                            <option value={3}>Module 3</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Locked Module Message */}
+                                                    {challenge.lockedModuleIndex > 0 && (
+                                                        <div className="space-y-2">
+                                                            <label className="text-sm font-medium">Lock Message</label>
+                                                            <Input
+                                                                value={challenge.lockedModuleMsg}
+                                                                onChange={e => updateChallenge(index, 'lockedModuleMsg', e.target.value)}
+                                                                placeholder="This module is restricted..."
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Chatbot Prompt */}
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Embedded Chatbot Personality</label>
+                                                        <textarea
+                                                            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                            value={challenge.chatbotPrompt}
+                                                            onChange={e => updateChallenge(index, 'chatbotPrompt', e.target.value)}
+                                                            placeholder="You are a helpful assistant embedded in this website. Gradually reveal clues..."
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

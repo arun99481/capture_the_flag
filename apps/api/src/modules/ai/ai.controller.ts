@@ -97,6 +97,44 @@ Your role:
         }
     }
 
+    @Post('simulation/:challengeId')
+    async simulationChat(
+        @Param('challengeId') challengeId: string,
+        @Body() body: { message: string; history: { role: string; content: string }[] }
+    ) {
+        try {
+            const challenge = await this.aiService.getChallenge(challengeId);
+
+            // Use chatbotPrompt or fallback
+            const systemPrompt = challenge.chatbotPrompt || "You are a helpful assistant.";
+
+            // Build messages array
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                ...body.history.map(m => ({
+                    role: m.role === 'user' ? 'user' : 'assistant',
+                    content: m.content
+                })),
+                { role: 'user', content: body.message }
+            ];
+
+            const response = await this.ollama.chat({
+                model: this.model,
+                messages: messages as any,
+                stream: false,
+            });
+
+            return {
+                response: response.message.content
+            };
+        } catch (error) {
+            console.error('Ollama simulation error:', error);
+            return {
+                response: "I'm having trouble connecting to the simulation AI. Please try again later."
+            };
+        }
+    }
+
     @Post('challenge/:challengeId')
     async getChallenge(
         @Param('challengeId') challengeId: string
